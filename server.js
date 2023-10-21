@@ -1,13 +1,41 @@
 require("dotenv").config();
 const express = require("express");
+const { signUp, confirmEmail } = require("./cognito");
 const app = express();
 app.use(express.json());
 const stripe = require("stripe")(process.env.STRIPE_PRIVATE_KEY);
+
 const storeItems = new Map([
   [1, { priceInCents: 10000, name: "Item 1" }],
   [2, { priceInCents: 20000, name: "Item 2" }],
   [3, { priceInCents: 30000, name: "Item 3" }],
 ]);
+
+// Move Cognito-related logic to a separate file (cognito.js)
+app.post("/signup", async (req, res) => {
+  try {
+    const { username, password, ...attributes } = req.body;
+    const attrList = Object.keys(attributes).map((key) => ({
+      Name: key,
+      Value: attributes[key],
+    }));
+    const user = await signUp(username, password, attrList);
+    res.json(`User created successfully: ${user.getUsername()}`);
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+});
+
+app.post("/confirm-email", async (req, res) => {
+  try {
+    await confirmEmail(req.body.username, req.body.code);
+    res.json(`Confirmed successfully!`);
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+});
+
+// Stripe integration
 app.use("/create-checkout-session", async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.create({
@@ -31,12 +59,16 @@ app.use("/create-checkout-session", async (req, res) => {
     });
     res.json({ url: session.url });
   } catch (err) {
-    res.json(err).status(500);
+    res.status(500).json(err);
   }
 });
-app.use("/", (req, res) => {
-  res.send("working on port 5001 !");
+
+// Default route
+app.get("/", (req, res) => {
+  res.send("Working on port 5001!");
 });
-app.listen(5001, () => {
-  console.log("listening on port 5001");
+
+const port = process.env.PORT || 5001;
+app.listen(port, () => {
+  console.log(`Listening on port ${port}`);
 });
